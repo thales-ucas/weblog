@@ -1,13 +1,13 @@
-# 时间序列解析Nginx日志
+# 时间序列分析Nginx日志
 
 
-服务器上，nginx的日志很常见
+服务器上，Nginx的日志很常见
 
 
 网络服务日志分析，是常见的一种分析。可以根据之前的访问量，预估之后的访问量，然后根据访问量决定服务器是增加配置和带宽，还是减少。并且结合用户注册以及支付还可以分析用户转化率和支付率。
 
 
-我们现在就用时间序列分析一下nginx日志
+我们现在就用时间序列分析一下Nginx日志
 
 
 # 数据采集
@@ -52,13 +52,13 @@ df = pd.read_table('acces.log', sep=' ')
 ```
 
 
-> **sep** 代表分隔符，日志是用的 **空格** ，根据情况有可能是“,”或者“;”
+> **sep** 代表分隔符，日志是用的 **空格** ，根据情况有也可能是“,”或者“;”
 
 
 ## 设置头文件
 
 
-打开nginx配置，可以找到记录日志的部分
+打开Nginx配置，可以找到记录日志的部分
 
 
 ```conf
@@ -69,6 +69,7 @@ log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
 
 
 总共我们统计了这些内容——
+
 
  key | value
 ----- | -----
@@ -145,7 +146,7 @@ Nginx的time_local有点奇怪date、time、zone格式都没问题，但是竟�
 其实我们就是要把这个里面的冒号和外面的大括号去掉
 
 
-其实选择把date、time、zone都取出来，然后组合，因为觉得可能以后有别的用处，其实直接删除更简单
+我选择把date、time、zone都取出来，然后组合，因为觉得可能以后有别的用处，其实直接删除更简单
 
 
 正则表达式
@@ -154,6 +155,9 @@ Nginx的time_local有点奇怪date、time、zone格式都没问题，但是竟�
 ```
 /^\[(\w+\/\w+/\w+):(\w+:\w+:\w+)\s(\+\w+)\]$/
 ```
+
+
+操作表
 
 
 ```py
@@ -207,7 +211,7 @@ count = df.groupby(combination).agg({'request': 'count'}) # 合并之后记录co
 > freq参数具体可以看 https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
 
 
-最终混合了2372条数据
+最终合并成了2372条数据
 
 
 ```
@@ -301,7 +305,7 @@ tsaplots.plot_pacf(count, lags=120, ax=ax) # 偏自相关性画图120阶
 ## 单位根检验(Dickey-Fuller test)
 
 
-statsmodels.tsa.stattools.adfuller的函数可以获取
+函数 **statsmodels.tsa.stattools.adfuller** 可以获取
 
 
 ```py
@@ -356,13 +360,13 @@ Critical Value(10%) | -2.567427
 adf结果为-2.308233， 大于三个level(1%、5%、10%)的统计值(-3.433143, -2.862774, -2.567427)
 
 
-本数据不平稳
+本数据不平稳！
 
 
 ## 差分(difference)
 
 
-非平稳序列往往一次到两次差分之后，就会变成平稳序列。什么是差分呢？就是后一时间点的值减去当前时间点，也就是Dy~1~ = y~t~ + 1 - y~t~
+非平稳序列往往一次到两次差分之后，就会变成平稳序列。什么是差分呢？就是后一时间点的值减去当前时间点，也就是Δy~1~ = y~t+1~ - y~t~
 
 
 pandas直接就包含差分函数 **diff**
@@ -376,13 +380,13 @@ count['request'].diff()
 我们看看差分之后的检验
 
 
-> **dropna** 方法是去掉非数字
-
-
 ```py
 diff = count['request'].diff().dropna()
 dickey(diff)
 ```
+
+
+> **dropna** 方法是去掉非数字
 
 
 key | value
@@ -413,13 +417,19 @@ diff.plot(figsize=(15, 6))
 ## 获取最佳order
 
 
-### AIC:赤池信息准则（AkaikeInformation Criterion，AIC）
+### AIC:
+
+
+赤池信息准则（AkaikeInformation Criterion，AIC）
 
 
 在一般的情况下，AIC可以表示为： AIC=2k-2ln(L)
 
 
-### BIC:贝叶斯信息准则（Bayesian Information Criterion，BIC）
+### BIC:
+
+
+贝叶斯信息准则（Bayesian Information Criterion，BIC）
 
 
 计算公式：BIC=-2 ln(L) +ln(n)*k
@@ -457,7 +467,7 @@ orders = arma_order_select_ic(diff, ic=['aic', 'bic'], trend='nc', max_ar=8, max
 ![bic](./docs/assets/heatbic.png)
 
 
-最黑的就是最佳值
+颜色最黑的就是最佳值
 
 
 ## 模型
@@ -530,7 +540,11 @@ ax.legend()
 ![bic](./docs/assets/prediction.png)
 
 
-预测的是大的方向，按照数据来看，未来的访问量都是趋于平稳的，并不会有八月份的大波动
-
-
 aic的模型锯齿更明显一些，bic的模型更平滑一些
+
+
+预测的是大的方向，按照数据来看，未来的访问量都是趋于平稳的，并不会有八月份的大波动，并且还有向下的趋势
+
+
+也说明了大部分网站，可能都是这样的一个周期，上线有一波高涨，之后区域平稳，还有稍微的下降
+
